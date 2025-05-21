@@ -61,18 +61,6 @@ export default function ImageEditor() {
   const [lineSpacing, setLineSpacing] = useState(10) // Added for multi-line spacing
   const [isSaving, setIsSaving] = useState(false)
   const [editorTab, setEditorTab] = useState("content")
-  const [isMobileDevice, setIsMobileDevice] = useState(false)
-
-  // Check if we're on a mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera
-      const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase())
-      setIsMobileDevice(isMobile)
-    }
-
-    checkMobile()
-  }, [])
 
   useEffect(() => {
     if (templateId) {
@@ -200,7 +188,10 @@ export default function ImageEditor() {
     elements.forEach((element) => {
       // Set the font with the element's fontFamily
       ctx.font = `${element.fontSize}px ${element.fontFamily}`
-      ctx.fillStyle = element.color
+
+      // Ensure text color is visible - use the element's color or default to black
+      const textColor = element.color || "#000000"
+      ctx.fillStyle = textColor
 
       if (element.type === "personList") {
         // Draw the list of persons
@@ -272,46 +263,6 @@ export default function ImageEditor() {
     })
   }
 
-  // Helper function to check if a point is inside an element
-  const isPointInElement = (x: number, y: number, element: TextElement, ctx: CanvasRenderingContext2D): boolean => {
-    if (element.type === "personList") {
-      // Calculate the height of the entire list
-      const listHeight = personEntries.length * (element.fontSize + (element.lineSpacing || 10))
-
-      // Get the width of the longest entry
-      let maxWidth = 0
-      personEntries.forEach((person) => {
-        let text = ""
-        if (person.name) text += person.name
-        if (person.birthdate) text += " - " + format(person.birthdate, "MMMM d, yyyy")
-        const metrics = ctx.measureText(text)
-        maxWidth = Math.max(maxWidth, metrics.width)
-      })
-
-      // Check if point is within the list area
-      return (
-        x >= element.x - 5 &&
-        x <= element.x + maxWidth + 5 &&
-        y >= element.y - element.fontSize &&
-        y <= element.y + listHeight - element.fontSize
-      )
-    } else if (element.type === "quote") {
-      // Determine text content
-      let displayText = element.text
-      if (quote) {
-        displayText = quote
-      }
-
-      const metrics = ctx.measureText(displayText)
-      const height = element.fontSize
-
-      return x >= element.x - 5 && x <= element.x + metrics.width + 5 && y >= element.y - height && y <= element.y + 10
-    }
-
-    return false
-  }
-
-  // Handle mouse down event
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -320,59 +271,90 @@ export default function ImageEditor() {
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
-    handlePointerDown(x, y)
-  }
-
-  // Handle touch start event
-  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault() // Prevent scrolling when touching the canvas
-
-    const canvas = canvasRef.current
-    if (!canvas || e.touches.length === 0) return
-
-    const rect = canvas.getBoundingClientRect()
-    const touch = e.touches[0]
-    const x = touch.clientX - rect.left
-    const y = touch.clientY - rect.top
-
-    handlePointerDown(x, y)
-  }
-
-  // Common pointer down handler for both mouse and touch
-  const handlePointerDown = (x: number, y: number) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
     // Check if clicking on a text element
     for (let i = elements.length - 1; i >= 0; i--) {
       const element = elements[i]
+      const ctx = canvas.getContext("2d")
+      if (!ctx) continue
+
       ctx.font = `${element.fontSize}px ${element.fontFamily}`
 
-      if (isPointInElement(x, y, element, ctx)) {
-        // Found element under cursor/finger
-        setSelectedElement(element.id)
+      if (element.type === "personList") {
+        // Calculate the height of the entire list
+        const listHeight = personEntries.length * (element.fontSize + (element.lineSpacing || 10))
 
-        // Mark as dragging
-        const updatedElements = elements.map((el) => ({
-          ...el,
-          dragging: el.id === element.id,
-        }))
-        setElements(updatedElements)
+        // Get the width of the longest entry
+        let maxWidth = 0
+        personEntries.forEach((person) => {
+          let text = ""
+          if (person.name) text += person.name
+          if (person.birthdate) text += " - " + format(person.birthdate, "MMMM d, yyyy")
+          const metrics = ctx.measureText(text)
+          maxWidth = Math.max(maxWidth, metrics.width)
+        })
 
-        // Update editor controls with the selected element's properties
-        setFontSize(element.fontSize)
-        setTextColor(element.color)
-        setFontFamily(element.fontFamily)
-        if (element.type === "personList") {
+        // Check if click is within the list area
+        if (
+          x >= element.x - 5 &&
+          x <= element.x + maxWidth + 5 &&
+          y >= element.y - element.fontSize &&
+          y <= element.y + listHeight - element.fontSize
+        ) {
+          // Found element under cursor
+          setSelectedElement(element.id)
+
+          // Mark as dragging
+          const updatedElements = elements.map((el) => ({
+            ...el,
+            dragging: el.id === element.id,
+          }))
+          setElements(updatedElements)
+
+          // Update editor controls with the selected element's properties
+          setFontSize(element.fontSize)
+          setTextColor(element.color)
+          setFontFamily(element.fontFamily)
           setLineSpacing(element.lineSpacing || 10)
+
+          // Switch to style tab when an element is selected
+          setEditorTab("style")
+          return
+        }
+      } else if (element.type === "quote") {
+        // Determine text content
+        let displayText = element.text
+        if (quote) {
+          displayText = quote
         }
 
-        // Switch to style tab when an element is selected
-        setEditorTab("style")
-        return
+        const metrics = ctx.measureText(displayText)
+        const height = element.fontSize
+
+        if (
+          x >= element.x - 5 &&
+          x <= element.x + metrics.width + 5 &&
+          y >= element.y - height &&
+          y <= element.y + 10
+        ) {
+          // Found element under cursor
+          setSelectedElement(element.id)
+
+          // Mark as dragging
+          const updatedElements = elements.map((el) => ({
+            ...el,
+            dragging: el.id === element.id,
+          }))
+          setElements(updatedElements)
+
+          // Update editor controls with the selected element's properties
+          setFontSize(element.fontSize)
+          setTextColor(element.color)
+          setFontFamily(element.fontFamily)
+
+          // Switch to style tab when an element is selected
+          setEditorTab("style")
+          return
+        }
       }
     }
 
@@ -382,40 +364,16 @@ export default function ImageEditor() {
     setEditorTab("content")
   }
 
-  // Handle mouse move event
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    handlePointerMove(x, y)
-  }
-
-  // Handle touch move event
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault() // Prevent scrolling when touching the canvas
-
-    const canvas = canvasRef.current
-    if (!canvas || e.touches.length === 0) return
-
-    const rect = canvas.getBoundingClientRect()
-    const touch = e.touches[0]
-    const x = touch.clientX - rect.left
-    const y = touch.clientY - rect.top
-
-    handlePointerMove(x, y)
-  }
-
-  // Common pointer move handler for both mouse and touch
-  const handlePointerMove = (x: number, y: number) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
     const draggingElement = elements.find((el) => el.dragging)
     if (!draggingElement) return
+
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
 
     const updatedElements = elements.map((el) => {
       if (el.id === draggingElement.id) {
@@ -431,19 +389,148 @@ export default function ImageEditor() {
     setElements(updatedElements)
   }
 
-  // Handle mouse up event
   const handleMouseUp = () => {
-    handlePointerUp()
+    const updatedElements = elements.map((el) => ({
+      ...el,
+      dragging: false,
+    }))
+    setElements(updatedElements)
   }
 
-  // Handle touch end event
-  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault() // Prevent any default behavior
-    handlePointerUp()
+  // Simple touch event handlers
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length !== 1) return
+
+    const touch = e.touches[0]
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    const x = touch.clientX - rect.left
+    const y = touch.clientY - rect.top
+
+    // Check if touching a text element
+    for (let i = elements.length - 1; i >= 0; i--) {
+      const element = elements[i]
+      const ctx = canvas.getContext("2d")
+      if (!ctx) continue
+
+      ctx.font = `${element.fontSize}px ${element.fontFamily}`
+
+      if (element.type === "personList") {
+        // Calculate the height of the entire list
+        const listHeight = personEntries.length * (element.fontSize + (element.lineSpacing || 10))
+
+        // Get the width of the longest entry
+        let maxWidth = 0
+        personEntries.forEach((person) => {
+          let text = ""
+          if (person.name) text += person.name
+          if (person.birthdate) text += " - " + format(person.birthdate, "MMMM d, yyyy")
+          const metrics = ctx.measureText(text)
+          maxWidth = Math.max(maxWidth, metrics.width)
+        })
+
+        // Check if touch is within the list area
+        if (
+          x >= element.x - 5 &&
+          x <= element.x + maxWidth + 5 &&
+          y >= element.y - element.fontSize &&
+          y <= element.y + listHeight - element.fontSize
+        ) {
+          // Found element under touch
+          setSelectedElement(element.id)
+
+          // Mark as dragging
+          const updatedElements = elements.map((el) => ({
+            ...el,
+            dragging: el.id === element.id,
+          }))
+          setElements(updatedElements)
+
+          // Update editor controls with the selected element's properties
+          setFontSize(element.fontSize)
+          setTextColor(element.color)
+          setFontFamily(element.fontFamily)
+          setLineSpacing(element.lineSpacing || 10)
+
+          // Switch to style tab when an element is selected
+          setEditorTab("style")
+          return
+        }
+      } else if (element.type === "quote") {
+        // Determine text content
+        let displayText = element.text
+        if (quote) {
+          displayText = quote
+        }
+
+        const metrics = ctx.measureText(displayText)
+        const height = element.fontSize
+
+        if (
+          x >= element.x - 5 &&
+          x <= element.x + metrics.width + 5 &&
+          y >= element.y - height &&
+          y <= element.y + 10
+        ) {
+          // Found element under touch
+          setSelectedElement(element.id)
+
+          // Mark as dragging
+          const updatedElements = elements.map((el) => ({
+            ...el,
+            dragging: el.id === element.id,
+          }))
+          setElements(updatedElements)
+
+          // Update editor controls with the selected element's properties
+          setFontSize(element.fontSize)
+          setTextColor(element.color)
+          setFontFamily(element.fontFamily)
+
+          // Switch to style tab when an element is selected
+          setEditorTab("style")
+          return
+        }
+      }
+    }
+
+    // If touched outside any element, deselect
+    setSelectedElement(null)
+    // Switch back to content tab when no element is selected
+    setEditorTab("content")
   }
 
-  // Common pointer up handler for both mouse and touch
-  const handlePointerUp = () => {
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length !== 1) return
+
+    const touch = e.touches[0]
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const draggingElement = elements.find((el) => el.dragging)
+    if (!draggingElement) return
+
+    const rect = canvas.getBoundingClientRect()
+    const x = touch.clientX - rect.left
+    const y = touch.clientY - rect.top
+
+    const updatedElements = elements.map((el) => {
+      if (el.id === draggingElement.id) {
+        return {
+          ...el,
+          x,
+          y,
+        }
+      }
+      return el
+    })
+
+    setElements(updatedElements)
+  }
+
+  const handleTouchEnd = () => {
     const updatedElements = elements.map((el) => ({
       ...el,
       dragging: false,
@@ -596,15 +683,9 @@ export default function ImageEditor() {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            className="max-w-full border shadow-sm bg-white touch-none"
+            className="max-w-full border shadow-sm bg-white"
           />
         </div>
-
-        {isMobileDevice && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-800">
-            <p>Tap on text to select it, then drag to move it around.</p>
-          </div>
-        )}
 
         <div className="flex flex-wrap gap-2 justify-center md:justify-start">
           <Button onClick={handleDownload}>
@@ -692,9 +773,7 @@ export default function ImageEditor() {
                 />
               </div>
 
-              <p className="text-sm text-muted-foreground">
-                {isMobileDevice ? "Tap and drag text elements to position them" : "Drag text elements to position them"}
-              </p>
+              <p className="text-sm text-muted-foreground">Tap or drag text elements on the canvas to position them</p>
             </TabsContent>
 
             <TabsContent value="style" className="space-y-4">
