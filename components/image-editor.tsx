@@ -399,6 +399,9 @@ export default function ImageEditor() {
 
   // Simple touch event handlers
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Prevent default to stop scrolling and other browser behaviors
+    e.preventDefault()
+
     if (e.touches.length !== 1) return
 
     const touch = e.touches[0]
@@ -431,12 +434,15 @@ export default function ImageEditor() {
           maxWidth = Math.max(maxWidth, metrics.width)
         })
 
-        // Check if touch is within the list area
+        // Increase touch area for better mobile experience (without changing CSS)
+        const touchPadding = 20 // Larger touch area
+
+        // Check if touch is within the list area with increased padding
         if (
-          x >= element.x - 5 &&
-          x <= element.x + maxWidth + 5 &&
-          y >= element.y - element.fontSize &&
-          y <= element.y + listHeight - element.fontSize
+          x >= element.x - touchPadding &&
+          x <= element.x + maxWidth + touchPadding &&
+          y >= element.y - element.fontSize - touchPadding &&
+          y <= element.y + listHeight - element.fontSize + touchPadding
         ) {
           // Found element under touch
           setSelectedElement(element.id)
@@ -468,11 +474,14 @@ export default function ImageEditor() {
         const metrics = ctx.measureText(displayText)
         const height = element.fontSize
 
+        // Increase touch area for better mobile experience
+        const touchPadding = 20 // Larger touch area
+
         if (
-          x >= element.x - 5 &&
-          x <= element.x + metrics.width + 5 &&
-          y >= element.y - height &&
-          y <= element.y + 10
+          x >= element.x - touchPadding &&
+          x <= element.x + metrics.width + touchPadding &&
+          y >= element.y - height - touchPadding &&
+          y <= element.y + touchPadding + touchPadding
         ) {
           // Found element under touch
           setSelectedElement(element.id)
@@ -503,6 +512,9 @@ export default function ImageEditor() {
   }
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Prevent default to stop scrolling
+    e.preventDefault()
+
     if (e.touches.length !== 1) return
 
     const touch = e.touches[0]
@@ -516,6 +528,7 @@ export default function ImageEditor() {
     const x = touch.clientX - rect.left
     const y = touch.clientY - rect.top
 
+    // Update element position immediately for more responsive feel
     const updatedElements = elements.map((el) => {
       if (el.id === draggingElement.id) {
         return {
@@ -530,7 +543,10 @@ export default function ImageEditor() {
     setElements(updatedElements)
   }
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Prevent default behavior
+    if (e) e.preventDefault()
+
     const updatedElements = elements.map((el) => ({
       ...el,
       dragging: false,
