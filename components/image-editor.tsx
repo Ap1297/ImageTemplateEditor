@@ -39,6 +39,17 @@ interface TextElement {
   lineSpacing?: number // Added for multi-line spacing
 }
 
+interface TouchInfo {
+  isDragging: boolean
+  elementId: string | null
+  startX: number
+  startY: number
+  lastX: number
+  lastY: number
+  elementStartX: number
+  elementStartY: number
+}
+
 export default function ImageEditor() {
   const searchParams = useSearchParams()
   const templateId = searchParams.get("id")
@@ -48,6 +59,18 @@ export default function ImageEditor() {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [elements, setElements] = useState<TextElement[]>([])
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
+
+  // Touch state tracking
+  const touchInfoRef = useRef<TouchInfo>({
+    isDragging: false,
+    elementId: null,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    elementStartX: 0,
+    elementStartY: 0,
+  })
 
   // Replace single name/birthdate with an array of person entries
   const [personEntries, setPersonEntries] = useState<PersonEntry[]>([
@@ -397,11 +420,8 @@ export default function ImageEditor() {
     setElements(updatedElements)
   }
 
-  // Simple touch event handlers
+  // Completely rewritten touch handlers for better stability
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    // Prevent default to stop scrolling and other browser behaviors
-    e.preventDefault()
-
     if (e.touches.length !== 1) return
 
     const touch = e.touches[0]
@@ -411,6 +431,15 @@ export default function ImageEditor() {
     const rect = canvas.getBoundingClientRect()
     const x = touch.clientX - rect.left
     const y = touch.clientY - rect.top
+
+    // Store touch start position
+    const touchInfo = touchInfoRef.current
+    touchInfo.startX = x
+    touchInfo.startY = y
+    touchInfo.lastX = x
+    touchInfo.lastY = y
+    touchInfo.isDragging = false
+    touchInfo.elementId = null
 
     // Check if touching a text element
     for (let i = elements.length - 1; i >= 0; i--) {
@@ -434,8 +463,8 @@ export default function ImageEditor() {
           maxWidth = Math.max(maxWidth, metrics.width)
         })
 
-        // Increase touch area for better mobile experience (without changing CSS)
-        const touchPadding = 20 // Larger touch area
+        // Increase touch area for better mobile experience
+        const touchPadding = 30 // Larger touch area
 
         // Check if touch is within the list area with increased padding
         if (
@@ -447,12 +476,11 @@ export default function ImageEditor() {
           // Found element under touch
           setSelectedElement(element.id)
 
-          // Mark as dragging
-          const updatedElements = elements.map((el) => ({
-            ...el,
-            dragging: el.id === element.id,
-          }))
-          setElements(updatedElements)
+          // Store element info for dragging
+          touchInfo.isDragging = true
+          touchInfo.elementId = element.id
+          touchInfo.elementStartX = element.x
+          touchInfo.elementStartY = element.y
 
           // Update editor controls with the selected element's properties
           setFontSize(element.fontSize)
@@ -475,7 +503,7 @@ export default function ImageEditor() {
         const height = element.fontSize
 
         // Increase touch area for better mobile experience
-        const touchPadding = 20 // Larger touch area
+        const touchPadding = 30 // Larger touch area
 
         if (
           x >= element.x - touchPadding &&
@@ -486,12 +514,11 @@ export default function ImageEditor() {
           // Found element under touch
           setSelectedElement(element.id)
 
-          // Mark as dragging
-          const updatedElements = elements.map((el) => ({
-            ...el,
-            dragging: el.id === element.id,
-          }))
-          setElements(updatedElements)
+          // Store element info for dragging
+          touchInfo.isDragging = true
+          touchInfo.elementId = element.id
+          touchInfo.elementStartX = element.x
+          touchInfo.elementStartY = element.y
 
           // Update editor controls with the selected element's properties
           setFontSize(element.fontSize)
@@ -512,46 +539,47 @@ export default function ImageEditor() {
   }
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    // Prevent default to stop scrolling
-    e.preventDefault()
-
     if (e.touches.length !== 1) return
+
+    const touchInfo = touchInfoRef.current
+    if (!touchInfo.isDragging || !touchInfo.elementId) return
 
     const touch = e.touches[0]
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const draggingElement = elements.find((el) => el.dragging)
-    if (!draggingElement) return
-
     const rect = canvas.getBoundingClientRect()
     const x = touch.clientX - rect.left
     const y = touch.clientY - rect.top
 
-    // Update element position immediately for more responsive feel
-    const updatedElements = elements.map((el) => {
-      if (el.id === draggingElement.id) {
-        return {
-          ...el,
-          x,
-          y,
-        }
-      }
-      return el
-    })
+    // Calculate the delta movement
+    const deltaX = x - touchInfo.lastX
+    const deltaY = y - touchInfo.lastY
 
-    setElements(updatedElements)
+    // Update last position
+    touchInfo.lastX = x
+    touchInfo.lastY = y
+
+    // Update element position based on the delta
+    setElements((prevElements) =>
+      prevElements.map((el) => {
+        if (el.id === touchInfo.elementId) {
+          return {
+            ...el,
+            x: el.x + deltaX,
+            y: el.y + deltaY,
+          }
+        }
+        return el
+      }),
+    )
   }
 
-  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    // Prevent default behavior
-    if (e) e.preventDefault()
-
-    const updatedElements = elements.map((el) => ({
-      ...el,
-      dragging: false,
-    }))
-    setElements(updatedElements)
+  const handleTouchEnd = () => {
+    // Reset touch info
+    const touchInfo = touchInfoRef.current
+    touchInfo.isDragging = false
+    touchInfo.elementId = null
   }
 
   const updateSelectedElement = (updates: Partial<TextElement>) => {

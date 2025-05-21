@@ -7,6 +7,7 @@ import UploadSection from "@/components/upload-section"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import FontDebug from "@/components/font-debug"
+import TouchHelper from "@/components/touch-helper"
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("upload")
@@ -51,6 +52,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col">
+      <TouchHelper />
       <MobileHeader />
       <div className="flex-1 container max-w-5xl mx-auto px-4 py-4">
         <h1 className="text-2xl font-bold mb-6 text-center md:text-left">Birthday Template Creator</h1>
